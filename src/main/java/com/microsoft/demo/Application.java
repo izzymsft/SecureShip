@@ -1,152 +1,189 @@
 package com.microsoft.demo;
 
-import com.azure.identity.ChainedTokenCredential;
-import com.azure.identity.ChainedTokenCredentialBuilder;
-import com.azure.identity.ManagedIdentityCredential;
-import com.azure.identity.ManagedIdentityCredentialBuilder;
 import com.azure.security.keyvault.secrets.SecretClient;
-import com.azure.security.keyvault.secrets.SecretClientBuilder;
 import com.azure.security.keyvault.secrets.models.KeyVaultSecret;
-import com.microsoft.demo.models.Product;
-import com.microsoft.sqlserver.jdbc.SQLServerDataSource;
+import com.microsoft.demo.models.State;
+import com.microsoft.demo.models.StateConfidentialData;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestMethod;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
-import java.sql.Connection;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static com.microsoft.demo.utils.KeyVaultAuthenticator.authenticateWithAzureActiveDirectory;
+import static com.microsoft.demo.utils.KeyVaultAuthenticator.authenticateWithCredentials;
+
+/**
+ * Sample Application to Demonstrate Best Practices for the following
+ *
+ * - Accessing Azure Resources outside and AKS Cluster Securely
+ * - Accessing Web Applications inside the AKS cluster Securely
+ * - Automating the Deployment Process with Available Tools and Strategies
+ *
+ * API Docs is Available here http://localhost:8080/v3/api-docs/
+ * Swagger UI HTML is Available here http://localhost:8080/swagger-ui.html
+ */
 @SpringBootApplication
-@RestController
+@RestController()
+@Tag(name = "United States Secret Locations", description = "Sample Application to Demonstrate Best Practices")
 public class Application {
 
-    private static final String MSI_CLIENT_ID = "MSI_CLIENT_ID";
-    private static final String KEY_VAULT_URL = "KEY_VAULT_URL";
+    private final List<String> lookupKeys = new ArrayList<>(16);
 
-    private static final String AUTH_STRATEGY = "DB_AUTHENTICATION_STRATEGY";
-    private static final String DB_SERVER = "DATABASE_SERVER";
-    private static final String DB_NAME = "DATABASE_NAME";
+    private final Map<String, String> stateNames = new HashMap<>(16);
 
+    /**
+     * Default Constructor
+     */
     public Application() {
 
-    }
-
-    @RequestMapping(value="/products", method = RequestMethod.GET, produces = { "application/json" })
-    public List<Product> getProducts() {
-
-        List<Product> products = new ArrayList<Product>();
-
-        products.add(new Product(1, "", "", 1));
-        products.add(new Product(2, "", "", 1));
-
-        return products;
+        // Initializing the Lookup Keys
+        this.initializeLookupKeys();
     }
 
     /**
-     * Returns all the Available Environment Variables
-     *
-     * There are many subtle differences between the way environment variables are implemented on different systems.
-     *
-     * For example, Windows ignores case in environment variable names, while UNIX does not.
-     *
-     * The way environment variables are used also varies.
-     *
-     * For example, Windows provides the user name in an environment variable called USERNAME,
-     * while UNIX implementations might provide the user name in USER, LOGNAME, or both.
-     *
-     * To maximize portability, never refer to an environment variable when the same value is available in a system property.
-     *
-     * For example, if the operating system provides a user name, it will always be available in the system property user.name.
-     *
-     * See documentation for more information - https://docs.oracle.com/javase/tutorial/essential/environment/env.html
-     * @return
+     * Private Method Used for Setting up State Data
      */
-    private Map<String, String> getEnvironmentVariables() {
+    private void initializeLookupKeys() {
 
-        // Retrieve the Hash Map (Key-Value pair or Dictionary) of Environment Variables
-        Map<String, String> environmentVars = System.getenv();
+        // Loading up the two-letter abbreviations for the state names
+        lookupKeys.add("CA");
+        lookupKeys.add("FL");
+        lookupKeys.add("NJ");
+        lookupKeys.add("NY");
+        lookupKeys.add("TX");
+        lookupKeys.add("WA");
 
-        return environmentVars;
+        // Loading up the the full names
+        stateNames.put("CA", "California");
+        stateNames.put("FL", "Florida");
+        stateNames.put("NJ", "New Jersey");
+        stateNames.put("NY", "New York");
+        stateNames.put("TX", "Texas");
+        stateNames.put("WA", "Washington");
     }
 
-    @RequestMapping(value="/products2", method = RequestMethod.GET, produces = {"application/json"})
-    public List<Product> getProducts3() {
+    /**
+     * Returns ALL the Available States and Non-Confidential Data
+     *
+     * @return The Available States
+     */
+    @GetMapping(value="/states", produces = { "application/json" })
+    @Operation(description = "Returns ALL the Available States and Non-Confidential Data",
+            responses = {@ApiResponse(responseCode = "200", description = "All states names and information") })
+    public List<State> listStates() {
 
-        // Retrieves the Environment Variables
-        Map<String, String> environmentVars = this.getEnvironmentVariables();
+        // This will store the states location
+        List<State> statesCollection = new ArrayList<>();
 
-        final String msiClientId = environmentVars.get(MSI_CLIENT_ID);
-        final String keyVaultURL = environmentVars.get(KEY_VAULT_URL);
+        // Prepare the data to return to the calling client
+        for(String stateAbbreviation : this.lookupKeys) {
 
-        ManagedIdentityCredential managedIdentityCredential = new ManagedIdentityCredentialBuilder()
-                .clientId(msiClientId)
-                .build();
+            String fullStateName = this.stateNames.get(stateAbbreviation);
 
-        ChainedTokenCredential credentialChain = new ChainedTokenCredentialBuilder()
-                .addLast(managedIdentityCredential)
-                .build();
+            State currentStateData = new State(stateAbbreviation, fullStateName);
 
-        SecretClient client = new SecretClientBuilder()
-                .vaultUrl(keyVaultURL)
-                .credential(credentialChain)
-                .buildClient();
-
-
-        KeyVaultSecret secret = client.getSecret("usa");
-
-        List<Product> products = new ArrayList<Product>();
-
-        products.add(new Product(1, secret.getName(), secret.getValue(), 1));
-
-        return products;
-    }
-
-    @RequestMapping(value="/product3", method = RequestMethod.GET, produces = { "application/json" })
-    public List<Product> getProducts2() {
-
-        List<Product> products = new ArrayList<Product>();
-
-        Map<String, String> environmentVars = this.getEnvironmentVariables();
-
-        final String msiClientId = environmentVars.get(MSI_CLIENT_ID);
-        final String serverName = environmentVars.get(DB_SERVER);
-        final String databaseName = environmentVars.get(DB_NAME);
-        final String authenticationStrategy = environmentVars.get(AUTH_STRATEGY); // Default is ActiveDirectoryMSI
-
-        SQLServerDataSource ds = new SQLServerDataSource();
-        ds.setAuthentication(authenticationStrategy); // Authentication Strategy
-        ds.setMSIClientId(msiClientId); // Client ID for the User Manager Identity
-        ds.setServerName(serverName); // Database Server Hostname
-        ds.setDatabaseName(databaseName); // Database Name
-
-        // Replace with Client ID of User-Assigned MSI to be used
-        try (Connection connection = ds.getConnection();
-
-             Statement stmt = connection.createStatement();
-
-             ResultSet rs = stmt.executeQuery("SELECT * FROM dbo.product_info")) {
-
-            if (rs.next()) {
-
-                int productId = rs.getInt(1);
-
-                products.add(new Product(productId, "", "", 1));
-            }
-
-        } catch (Exception e) { // SQLException
-
+            // Adding to the collection result set
+            statesCollection.add(currentStateData);
         }
 
-        return products;
+        return statesCollection;
     }
 
+
+    /**
+     * Returns ALL the Available States Plus the Confidential Locations of the State Capital
+     *
+     * @return The Confidential Collection
+     */
+    @GetMapping(value="/states/secure-data", produces = {"application/json"})
+    @Operation(description = "Returns ALL the Available States and Non-Confidential Data",
+            responses = {@ApiResponse(responseCode = "200", description = "Returns ALL the Available States Plus the Confidential Locations of the State Capital") })
+    public List<StateConfidentialData> getConfidentialData() {
+
+        //SecretClient client = authenticateWithCredentials();
+        SecretClient client = authenticateWithAzureActiveDirectory();
+
+        // This will store all the confidential data we are about to return to the calling client
+        List<StateConfidentialData> confidentialCollection = new ArrayList<>();
+
+        // Go through the list of state abbreviations and prepare the confidential collection to return
+        for(final String abbr : this.lookupKeys) {
+
+            // Lookup the full name for the state
+            String fullName = this.stateNames.get(abbr);
+
+            // Retrieves a Secret from Key Vault containing the confidential information
+            KeyVaultSecret secret = client.getSecret(abbr);
+
+            // Confidential data we are retrieving from key-vault (location of best recipes and restaurants)
+            String stateCapital = secret.getValue();
+
+            // Construct the confidential object
+            StateConfidentialData currentStateData = new StateConfidentialData(abbr, fullName, stateCapital);
+
+            // Add it to the collection
+            confidentialCollection.add(currentStateData);
+        }
+
+        return confidentialCollection;
+    }
+
+    /**
+     * Simulates a Post Request - Returns ALL the Available States and Non-Confidential Data
+     *
+     * @return The Available States
+     */
+    @PostMapping(value="/states", produces = { "application/json" })
+    @Operation(description = "Simulates the creation of the new state record",
+            responses = {@ApiResponse(responseCode = "200", description = "Returns ALL the Available States Plus the Confidential Locations of the State Capital") })
+    public List<State> createState(@RequestBody State body) {
+
+        return this.listStates();
+    }
+
+    /**
+     * Simulates a Put Request - Returns ALL the Available States and Non-Confidential Data
+     *
+     * @return The Available States
+     */
+    @PutMapping(value="/states/{id}", produces = { "application/json" })
+    @Operation(description = "Simulates the modification of an existing state record given the id",
+            responses = {@ApiResponse(responseCode = "200", description = "Returns ALL the Available States Plus the Confidential Locations of the State Capital") })
+    public List<State> modifyState(@PathVariable("id") String id, @RequestBody State body) {
+
+        return this.listStates();
+    }
+
+    /**
+     * Simulates a Delete Request - Returns ALL the Available States and Non-Confidential Data
+     *
+     * @return The Available States
+     */
+    @DeleteMapping(value="/states/{id}", produces = { "application/json" })
+    @Operation(description = "Simulates the removal of an existing state record given the id",
+            responses = {@ApiResponse(responseCode = "200", description = "Returns ALL the Available States Plus the Confidential Locations of the State Capital") })
+    public List<State> removeState(@PathVariable("id") String id) {
+
+        return this.listStates();
+    }
+
+    private void logRequestContents(final String contents) {
+
+        contents.toString();
+    }
+
+    /**
+     * Entry Point for the Application
+     *
+     * @param args Arguments for the Application
+     */
     public static void main(String[] args) {
         SpringApplication.run(Application.class, args);
     }

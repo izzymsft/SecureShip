@@ -50,11 +50,15 @@
       <artifactId>azure-identity</artifactId>
       <version>1.0.1</version>
     </dependency>
-    <!-- https://mvnrepository.com/artifact/com.azure/azure-security-keyvault-secrets -->
     <dependency>
       <groupId>com.azure</groupId>
       <artifactId>azure-security-keyvault-secrets</artifactId>
       <version>4.1.0</version>
+    </dependency>
+    <dependency>
+      <groupId>org.springdoc</groupId>
+      <artifactId>springdoc-openapi-ui</artifactId>
+      <version>1.1.44</version>
     </dependency>
   </dependencies>
 </project>
