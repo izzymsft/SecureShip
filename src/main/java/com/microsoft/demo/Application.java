@@ -17,7 +17,6 @@ import java.util.List;
 import java.util.Map;
 
 import static com.microsoft.demo.utils.KeyVaultAuthenticator.authenticateWithAzureActiveDirectory;
-import static com.microsoft.demo.utils.KeyVaultAuthenticator.authenticateWithCredentials;
 
 /**
  * Sample Application to Demonstrate Best Practices for the following
@@ -174,7 +173,7 @@ public class Application {
         return this.listStates();
     }
 
-    private void logRequestContents(final String contents) {
+    protected void logRequestContents(final String contents) {
 
         contents.toString();
     }
